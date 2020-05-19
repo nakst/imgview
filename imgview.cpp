@@ -1,3 +1,5 @@
+// TODO gifs, rotate, crop
+
 #include <windows.h> 
 #include <windowsx.h> 
 #include <commctrl.h> 
@@ -26,7 +28,7 @@ HCURSOR cursorPan;
 
 UINT imageAnchorX, imageAnchorY;
 UINT imageWidth, imageHeight;
-GpImage *imageObject;
+GpBitmap *imageObject;
 bool imageError, imageChanged;
 
 DWORD threadMain;
@@ -64,6 +66,22 @@ size_t strlen(const char *s) {
 	size_t c = 0;
 	for (; *s; s++) c++;
 	return c;
+}
+
+bool StringEndsWith(const wchar_t *p, const wchar_t *p2) {
+	size_t c = 0;
+	for (; *p; p++) c++;
+	size_t c2 = 0;
+	for (; *p2; p2++) c++;
+	if (c < c2) return false;
+	
+	for (int i = 0; i < c2; i++) {
+		if (p[-1 - i] != p2[-1 - i]) {
+			return false;
+		}
+	}
+
+	return true;
 }
 
 void StringCopy(wchar_t *d, const wchar_t *s) {
@@ -172,7 +190,7 @@ void UpdateStatusBar() {
 	uint32_t color = 0;
 	
 	if (x >= 0 && y >= 0 && x < imageWidth && y < imageHeight) {
-		GdipBitmapGetPixel((GpBitmap *) imageObject, x, y, (ARGB *) &color);
+		GdipBitmapGetPixel(imageObject, x, y, (ARGB *) &color);
 	}
 	
 	wchar_t buffer[256];
@@ -209,7 +227,7 @@ void UpdateViewport(bool center = false) {
 	if (imageHeight > bounds.bottom) minimumZoomY = (float) bounds.bottom / imageHeight;
 	float minimumZoom = minimumZoomX < minimumZoomY ? minimumZoomX : minimumZoomY;
 	
-	if (zoom < minimumZoom || imageChanged || zoomFit) {
+	if (zoom < minimumZoom || (imageChanged && (~GetKeyState(VK_SHIFT) & 0x8000)) || zoomFit) {
 		zoom = minimumZoom;
 		zoomFit = true;
 	}
@@ -315,7 +333,7 @@ void LoadClipboard() {
 				imageObject = NULL;
 			}
 			
-			if (Ok != GdipLoadImageFromStream(stream, &imageObject)) {
+			if (Ok != GdipCreateBitmapFromStream(stream, &imageObject)) {
 				imageError = true;
 				return;
 			}
@@ -341,15 +359,84 @@ void LoadImage(wchar_t *fileName) {
 		imageObject = NULL;
 	}
 	
-	if (Ok != GdipLoadImageFromFile(fileName, &imageObject)) {
+	if (!StringEndsWith(fileName, L".bmp")
+			&& !StringEndsWith(fileName, L".BMP")
+			&& !StringEndsWith(fileName, L".gif")
+			&& !StringEndsWith(fileName, L".GIF")
+			&& !StringEndsWith(fileName, L".jpeg")
+			&& !StringEndsWith(fileName, L".JPEG")
+			&& !StringEndsWith(fileName, L".jpg")
+			&& !StringEndsWith(fileName, L".JPG")
+			&& !StringEndsWith(fileName, L".png")
+			&& !StringEndsWith(fileName, L".PNG")
+			&& !StringEndsWith(fileName, L".tif")
+			&& !StringEndsWith(fileName, L".TIF")
+			&& !StringEndsWith(fileName, L".tiff")
+			&& !StringEndsWith(fileName, L".TIFF")
+			&& !StringEndsWith(fileName, L".wmf")
+			&& !StringEndsWith(fileName, L".WMF")
+			&& !StringEndsWith(fileName, L".emf")
+			&& !StringEndsWith(fileName, L".EMF")) {
+		imageError = true;
+		return;	
+	}
+	
+	IStream *stream = NULL;
+	
+	{
+		bool success = false;
+		
+		HANDLE handle = INVALID_HANDLE_VALUE;
+		BYTE *buffer = NULL;
+		DWORD fileSize = 0, fileSizeHigh = 0, bytesRead = 0;
+		
+		handle = CreateFileW(fileName, GENERIC_READ, FILE_SHARE_READ, 0, 
+		OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+		if (handle == INVALID_HANDLE_VALUE) goto error;
+		
+		fileSize = GetFileSize(handle, &fileSizeHigh);
+		if (fileSizeHigh || fileSize == 0xFFFFFFFF) goto error;
+		
+		buffer = (BYTE *) malloc(fileSize);
+		if (!buffer) goto error;
+		
+		if (!ReadFile(handle, buffer, fileSize, &bytesRead, NULL)) goto error;
+		if (bytesRead != fileSize) goto error;  
+		
+		stream = SHCreateMemStream(buffer, fileSize);
+		if (!stream) goto error;
+		
+		success = true;
+		error:;
+		if (handle != INVALID_HANDLE_VALUE) CloseHandle(handle);
+		if (stream && !success) stream->Release();
+		if (buffer) free(buffer);
+		
+		if (!success) {
+			imageError = true;
+			return;
+		}
+	}
+	
+	if (Ok != GdipCreateBitmapFromStream(stream, &imageObject)) {
+		stream->Release();
 		imageError = true;
 		return;
 	}
 	
+	stream->Release();
 	imageError = false;
 	imageChanged = true;
 	GdipGetImageWidth(imageObject, &imageWidth);
 	GdipGetImageHeight(imageObject, &imageHeight);
+	
+	GpBitmap *result = NULL;
+	
+	if (Ok == GdipCloneBitmapArea(0, 0, imageWidth, imageHeight, PixelFormat32bppARGB, 
+			imageObject, &result)) {
+		GdipDisposeImage(imageObject);
+		imageObject = result;
+	}
 }
 
 LRESULT CALLBACK FrameProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -370,9 +457,11 @@ LRESULT CALLBACK FrameProcedure(HWND window, UINT message, WPARAM wParam, LPARAM
 		zoomFit = false;
 		int divisions = GET_WHEEL_DELTA_WPARAM(wParam) / 120;
 		float factor = 1;
-		while (divisions > 0) factor *= 1.2f, divisions--;
-		while (divisions < 0) factor /= 1.2f, divisions++;
-		if (zoom * factor > 16) return 0;
+		float perDivision = (GetKeyState(VK_CONTROL) & 0x8000) ? 2.0f 
+			: (GetKeyState(VK_MENU) & 0x8000) ? 1.01f : 1.2f;
+		while (divisions > 0) factor *= perDivision, divisions--;
+		while (divisions < 0) factor /= perDivision, divisions++;
+		if (zoom * factor > 64) factor = 64 / zoom;
 		
 		POINT point;
 		GetCursorPos(&point);
@@ -402,6 +491,7 @@ LRESULT CALLBACK FrameProcedure(HWND window, UINT message, WPARAM wParam, LPARAM
 				InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 2, "Cop&y to clipboard\tCtrl+C");
 				InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 3, "Copy as pa&th\tCtrl+Shift+C");
 				InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_SEPARATOR, 0, 0);
+				InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING | MF_GRAYED, 0, "Hold shift to keep pan and zoom");
 				InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 4, "&Previous\tLeft");
 				InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 5, "&Next\tRight");
 			}
@@ -409,7 +499,6 @@ LRESULT CALLBACK FrameProcedure(HWND window, UINT message, WPARAM wParam, LPARAM
 			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 6, "Re&fresh\tF5");
 			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_SEPARATOR, 0, 0);
 #if 0
-			// TODO Possible future extensions: rotation and cropping.
 			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 7, "Rotate &anticlockwise\tCtrl+Left");
 			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 8, "Rotate &clockwise\tCtrl+Right");
 			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 9, "C&rop\tCtrl+R");
@@ -421,6 +510,8 @@ LRESULT CALLBACK FrameProcedure(HWND window, UINT message, WPARAM wParam, LPARAM
 			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_SEPARATOR, 0, 0);
 			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 12, "Fit to &window\tCtrl+0");
 			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 13, "Actual si&ze\tCtrl+1");
+			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_SEPARATOR, 0, 0);
+			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 14, "Count c&olors\tCtrl+L");
 			
 			TrackPopupMenu(menuRightClick, 0, x, y, 0, window, 0);
 		}
@@ -509,6 +600,67 @@ LRESULT CALLBACK FrameProcedure(HWND window, UINT message, WPARAM wParam, LPARAM
 				zoom = 1;
 				zoomFit = false;
 				UpdateViewport(true);
+			} else if (LOWORD(wParam) == 14 && !imageError && imageObject) {
+				int count = 0;
+				uint8_t *memory = (uint8_t *) HeapAlloc(processHeap, HEAP_ZERO_MEMORY, 0x10000 * (sizeof(uint16_t *) + sizeof(uint16_t)));
+				uint16_t **bins = (uint16_t **) memory;
+				uint16_t *usage = (uint16_t *) (memory + 0x10000 * sizeof(uint16_t *));
+				
+				for (int i = 0; i < imageWidth; i++) {
+					for (int j = 0; j < imageHeight; j++) {
+						uint32_t color;
+						GdipBitmapGetPixel(imageObject, i, j, (ARGB *) &color);
+						
+						if (!(color & 0xFF000000)) {
+							color = 0; // All completely transparent pixels are the same.
+						}
+						
+						uint16_t slot = color & 0xFFFF;
+						
+						if (usage[slot] == 0) {
+							usage[slot] = 1;
+							bins[slot] = (uint16_t *) HeapAlloc(processHeap, 0, 4 * sizeof(uint16_t));
+							bins[slot][0] = color >> 16;
+							count++;
+							goto nextPixel;
+						}
+						
+						uint16_t *bin = bins[slot];
+						
+						for (int i = 0; i < usage[slot]; i++) {
+							if (bin[i] == (color >> 16)) {
+								goto nextPixel;
+							}
+						}
+						
+						int max = HeapSize(processHeap, 0, bin) / sizeof(uint16_t);
+						
+						if (max == usage[slot]) {
+							bins[slot] = (uint16_t *) HeapReAlloc(processHeap, 0, bin, max * 2 * sizeof(uint16_t));
+							bin = bins[slot];
+						}
+						
+						bin[usage[slot]] = color >> 16;
+						usage[slot]++;
+						count++;
+						
+						nextPixel:;
+					}
+				}
+				
+				for (int i = 0; i < 0x10000; i++) {
+					if (bins[i]) {
+						HeapFree(processHeap, 0, bins[i]);
+					}
+				}
+				
+				HeapFree(processHeap, 0, memory);
+				
+				wchar_t buffer[64];
+				buffer[0] = 0;
+				StringAppendInteger(buffer, count);
+				StringAppend(buffer, L" unique colors in image");
+				MessageBoxW(windowFrame, buffer, L"imgview", MB_OK);
 			}
 		}
 	} else {
@@ -676,6 +828,7 @@ void WinMainCRTStartup() {
 	windowClass.lpfnWndProc = FrameProcedure;
 	windowClass.lpszClassName = "frame";
 	windowClass.hCursor = LoadCursor(NULL, IDC_ARROW);
+	windowClass.hIcon = LoadIcon(instance, MAKEINTRESOURCE(1));
 	windowFrame = CreateWindowEx(0, (LPSTR) RegisterClassEx(&windowClass), "imgview", 
 		WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 800, 600, 0, 0, 0, 0);
 		
@@ -686,10 +839,11 @@ void WinMainCRTStartup() {
 		
 	brushLightBackground = CreateSolidBrush(RGB(238, 243, 250));
 	brushDarkBackground = CreateSolidBrush(RGB(23, 26, 30));
-		
+	
 	windowClass.lpfnWndProc = ViewportProcedure;
 	windowClass.lpszClassName = "viewport";
 	windowClass.hbrBackground = brushLightBackground;
+	windowClass.hIcon = NULL;
 	windowViewport = CreateWindowEx(WS_EX_COMPOSITED, (LPSTR) RegisterClassEx(&windowClass), 0, 
 		WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, windowFrame, 0, 0, 0);
 		
@@ -743,6 +897,8 @@ void WinMainCRTStartup() {
 				SendMessage(windowFrame, WM_COMMAND, 12, 0);
 			} else if (wParam == '1' && holdCtrl) {
 				SendMessage(windowFrame, WM_COMMAND, 13, 0);
+			} else if (wParam == 'L' && holdCtrl) {
+				SendMessage(windowFrame, WM_COMMAND, 14, 0);
 			} else {
 				goto dispatch;
 			}
