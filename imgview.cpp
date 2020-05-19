@@ -72,7 +72,7 @@ bool StringEndsWith(const wchar_t *p, const wchar_t *p2) {
 	size_t c = 0;
 	for (; *p; p++) c++;
 	size_t c2 = 0;
-	for (; *p2; p2++) c++;
+	for (; *p2; p2++) c2++;
 	if (c < c2) return false;
 	
 	for (int i = 0; i < c2; i++) {
