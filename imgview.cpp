@@ -15,6 +15,19 @@ using namespace Gdiplus::DllExports;
 
 /////////////////////////////////////////////////////////////////
 
+#ifdef __cplusplus 
+extern "C"
+#endif
+__declspec(naked) void _ftol2_sse()
+{
+	__asm
+	{
+		fistp dword ptr [esp-4]
+		mov   eax,[esp-4]
+		ret
+	}
+}
+
 extern "C" int _fltused = 0;
 typedef HRESULT (*GetDpiForMonitorType)(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT *dpiX, UINT *dpiY);
 typedef BOOL (*SetProcessDpiAwarenessContextType)(DPI_AWARENESS_CONTEXT value);
@@ -670,7 +683,7 @@ LRESULT CALLBACK FrameProcedure(HWND window, UINT message, WPARAM wParam, LPARAM
 	return 0;
 }
 
-DWORD GetFolderContents(void *_filePath) {
+DWORD WINAPI GetFolderContents(void *_filePath) {
 	wchar_t *filePath = (wchar_t *) _filePath;
 	wchar_t pathBuffer[MAX_PATH + 4];
 	
