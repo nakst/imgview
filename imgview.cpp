@@ -15,18 +15,18 @@ using namespace Gdiplus::DllExports;
 
 /////////////////////////////////////////////////////////////////
 
+#ifndef _WIN64 
 #ifdef __cplusplus 
 extern "C"
 #endif
-__declspec(naked) void _ftol2_sse()
-{
-	__asm
-	{
-		fistp dword ptr [esp-4]
-		mov   eax,[esp-4]
+__declspec(naked) void _ftol2_sse() {
+	__asm {
+		fistp	dword ptr [esp - 4]
+		mov	eax,[esp - 4]
 		ret
 	}
 }
+#endif
 
 extern "C" int _fltused = 0;
 typedef HRESULT (*GetDpiForMonitorType)(HMONITOR hmonitor, MONITOR_DPI_TYPE dpiType, UINT *dpiX, UINT *dpiY);
