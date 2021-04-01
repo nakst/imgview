@@ -36,7 +36,7 @@ HANDLE processHeap;
 
 HWND windowFrame, windowViewport, windowStatusBar;
 HBRUSH brushDarkBackground, brushLightBackground;
-bool usingDarkBackground;
+bool usingDarkBackground, hideStatusBar;
 HCURSOR cursorPan;
 
 UINT imageAnchorX, imageAnchorY;
@@ -461,8 +461,16 @@ LRESULT CALLBACK FrameProcedure(HWND window, UINT message, WPARAM wParam, LPARAM
 	} else if (message == WM_SIZE) {
 		RECT bounds, statusBarBounds;
 		GetClientRect(window, &bounds);
-		SendMessage(windowStatusBar, WM_SIZE, 0, 0);
-		GetWindowRect(windowStatusBar, &statusBarBounds);
+		
+		if (hideStatusBar) {
+			statusBarBounds.top = statusBarBounds.bottom = 0;
+			ShowWindow(windowStatusBar, SW_HIDE);
+		} else {
+			SendMessage(windowStatusBar, WM_SIZE, 0, 0);
+			GetWindowRect(windowStatusBar, &statusBarBounds);
+			ShowWindow(windowStatusBar, SW_SHOW);
+		}
+		
 		MoveWindow(windowViewport, 0, 0, bounds.right, bounds.bottom - (statusBarBounds.bottom - statusBarBounds.top), TRUE);
 	} else if (message == WM_KEYDOWN && wParam == VK_ESCAPE) {
 		ExitProcess(0);
@@ -520,6 +528,7 @@ LRESULT CALLBACK FrameProcedure(HWND window, UINT message, WPARAM wParam, LPARAM
 			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 10, "S&et anchor\tCtrl+M");
 			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_SEPARATOR, 0, 0);
 			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 11, "Toggle &dark\tCtrl+D");
+			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 15, "Toggle status &bar\tCtrl+B");
 			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_SEPARATOR, 0, 0);
 			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 12, "Fit to &window\tCtrl+0");
 			InsertMenu(menuRightClick, -1, MF_BYPOSITION | MF_STRING, 13, "Actual si&ze\tCtrl+1");
@@ -674,6 +683,9 @@ LRESULT CALLBACK FrameProcedure(HWND window, UINT message, WPARAM wParam, LPARAM
 				StringAppendInteger(buffer, count);
 				StringAppend(buffer, L" unique colors in image");
 				MessageBoxW(windowFrame, buffer, L"imgview", MB_OK);
+			} else if (LOWORD(wParam) == 15) {
+				hideStatusBar = !hideStatusBar;
+				SendMessage(window, WM_SIZE, 0, 0);
 			}
 		}
 	} else {
@@ -912,6 +924,8 @@ void WinMainCRTStartup() {
 				SendMessage(windowFrame, WM_COMMAND, 13, 0);
 			} else if (wParam == 'L' && holdCtrl) {
 				SendMessage(windowFrame, WM_COMMAND, 14, 0);
+			} else if (wParam == 'B' && holdCtrl) {
+				SendMessage(windowFrame, WM_COMMAND, 15, 0);
 			} else {
 				goto dispatch;
 			}
