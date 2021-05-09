@@ -271,13 +271,14 @@ LRESULT CALLBACK ViewportProcedure(HWND window, UINT message, WPARAM wParam, LPA
 		RECT bounds;
 		GetClientRect(window, &bounds);
 		
-		int x = (int) (0.5f + LinearMap(0, panX, panX + bounds.right / zoom, 0, bounds.right));
-		int y = (int) (0.5f + LinearMap(0, panY, panY + bounds.bottom / zoom, 0, bounds.bottom));	
+		float x = 0.5f + LinearMap(0, panX, panX + bounds.right / zoom, 0, bounds.right);
+		float y = 0.5f + LinearMap(0, panY, panY + bounds.bottom / zoom, 0, bounds.bottom);	
 
 		GpGraphics *graphics;
 		GdipCreateFromHDC(paint.hdc, &graphics);
 		GdipSetInterpolationMode(graphics, zoom < 1 ? InterpolationModeHighQualityBilinear : InterpolationModeNearestNeighbor);
-		GdipDrawImageRect(graphics, imageObject, x, y, imageWidth * zoom, imageHeight * zoom);
+		GdipDrawImageRectRect(graphics, imageObject, (int) x, (int) y, imageWidth * zoom, imageHeight * zoom,
+			-0.5f, -0.5f, imageWidth, imageHeight, UnitPixel, NULL, NULL, NULL);
 		GdipDeleteGraphics(graphics);
 
 		EndPaint(window, &paint);
