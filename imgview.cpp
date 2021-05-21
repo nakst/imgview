@@ -252,11 +252,11 @@ void UpdateViewport(bool center = false) {
 	if (panY < 0) panY = 0;
 	if (panY > imageHeight - bounds.bottom / zoom) panY = imageHeight - bounds.bottom / zoom;
 	
-	if (imageWidth * zoom <= bounds.right || center) {
+	if (bounds.right && (imageWidth * zoom <= bounds.right || center)) {
 		panX = imageWidth / 2 - bounds.right / zoom / 2;
 	}
 	
-	if (imageHeight * zoom <= bounds.bottom || center) {
+	if (bounds.bottom && (imageHeight * zoom <= bounds.bottom || center)) {
 		panY = imageHeight / 2 - bounds.bottom / zoom / 2;
 	}
 	
