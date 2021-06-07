@@ -17,8 +17,10 @@ Features:
 - pixel perfect image magnification
 - high quality image shrinking
 - right click to see all commands
+- F5 to refresh
 
 [Buy now!!](https://github.com/nakst/imgview/releases/download/v0.2/imgview.exe)
 
-![Screenshot of the program, showing a window containing an image against a light background, and the status bar showing the size of the image and the coordinates of the pixel beneath the mouse cursor and its hex color code.](https://cdn.discordapp.com/attachments/404399251276169217/711610565507940452/unknown.png)
+![Screenshot of the program, showing a window containing an image against a light background, and the status bar showing the size of the image and the coordinates of the pixel beneath the mouse cursor and its hex color code.](https://cdn.discordapp.com/attachments/462643277321994245/851564438116761620/imgview_preview.png)
 
+Photo: https://unsplash.com/photos/zkfG148MeYc
