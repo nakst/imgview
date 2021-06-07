@@ -186,6 +186,25 @@ float LinearMap(float value, float inFrom, float inTo, float outFrom, float outT
 
 /////////////////////////////////////////////////////////////////
 
+bool GetDarkMode() {
+	HKEY hKey;
+	DWORD value;
+	DWORD value_size = sizeof(value);
+	RegCreateKeyEx(HKEY_CURRENT_USER, "SOFTWARE\\imgview", 0, 0, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS , 0, &hKey, 0);
+	RegGetValue(hKey, 0, "DarkMode", RRF_RT_DWORD, 0, &value, &value_size);
+	RegCloseKey(hKey);
+	return value;
+}
+
+void SetDarkMode(bool is_dark) {
+	HKEY hKey;
+	DWORD value = is_dark;
+	DWORD value_size = sizeof(value);
+	RegCreateKeyEx(HKEY_CURRENT_USER, "SOFTWARE\\imgview", 0, 0, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS , 0, &hKey, 0);
+	RegSetValueEx(hKey, "DarkMode", 0, REG_DWORD, (const BYTE*)&value, value_size);
+	RegCloseKey(hKey);
+}
+
 void UpdateStatusBar() {
 	if (!imageObject) return;
 
@@ -614,6 +633,7 @@ LRESULT CALLBACK FrameProcedure(HWND window, UINT message, WPARAM wParam, LPARAM
 				imageAnchorX = lastMouseX, imageAnchorY = lastMouseY;
 			} else if (LOWORD(wParam) == 11) {
 				usingDarkBackground = !usingDarkBackground;
+				SetDarkMode(usingDarkBackground);
 				SetClassLongPtr(windowViewport, GCLP_HBRBACKGROUND, (LONG_PTR) (usingDarkBackground ? brushDarkBackground : brushLightBackground));
 				RedrawWindow(windowViewport, NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
 			} else if (LOWORD(wParam) == 12) {
@@ -865,10 +885,12 @@ void WinMainCRTStartup() {
 		
 	brushLightBackground = CreateSolidBrush(RGB(238, 243, 250));
 	brushDarkBackground = CreateSolidBrush(RGB(23, 26, 30));
-	
+
+	usingDarkBackground = GetDarkMode();
+
 	windowClass.lpfnWndProc = ViewportProcedure;
 	windowClass.lpszClassName = "viewport";
-	windowClass.hbrBackground = brushLightBackground;
+	windowClass.hbrBackground = usingDarkBackground ? brushDarkBackground : brushLightBackground;
 	windowClass.hIcon = NULL;
 	windowViewport = CreateWindowEx(WS_EX_COMPOSITED, (LPSTR) RegisterClassEx(&windowClass), 0, 
 		WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, windowFrame, 0, 0, 0);
