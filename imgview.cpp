@@ -175,8 +175,8 @@ void free(void *pointer) {
 	HeapFree(processHeap, 0, pointer);
 }
 
-#define Assert(x) do { if (!(x)) AssertionFailed(); } while (0)
-void AssertionFailed() { MessageBox(windowFrame, "An internal error has occurred.", 0, MB_OK); ExitProcess(1); }
+#define Assert(x) do { if (!(x)) AssertionFailed(x); } while (0)
+#define AssertionFailed(x) do { MessageBox(windowFrame, "An internal error has occurred.\n\n" #x " is not true.", 0, MB_OK | MB_ICONERROR); ExitProcess(1); } while (0)
 
 float LinearMap(float value, float inFrom, float inTo, float outFrom, float outTo) {
 	float inRange = inTo - inFrom, outRange = outTo - outFrom;
